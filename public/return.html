@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Resultado</title>
+
+<style>
+body {
+  font-family: Arial;
+  text-align:center;
+  background:#0a2540;
+  color:white;
+  padding-top:100px;
+}
+</style>
+</head>
+
+<body>
+
+<h2 id="status">A verificar...</h2>
+<button onclick="window.location.href='/'">Tentar novamente</button>
+
+<script>
+async function check() {
+  const params = new URLSearchParams(window.location.search);
+  const ref = params.get("ref");
+
+  const res = await fetch("/status/" + ref);
+  const data = await res.json();
+
+  if (data.status === "SUCCESS") {
+    document.getElementById("status").innerText = "✅ SUCESSO";
+  } else if (data.status === "ERROR") {
+    document.getElementById("status").innerText = "❌ ERRO";
+  } else {
+    setTimeout(check, 3000);
+  }
+}
+
+check();
+</script>
+
+</body>
+</html>
