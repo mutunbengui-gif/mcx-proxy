@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Callbacks</title>
+
+<style>
+body {
+  font-family: Arial;
+  background:#0a2540;
+  color:white;
+  padding:20px;
+}
+
+.card {
+  background:#ffffff10;
+  margin-bottom:10px;
+  padding:10px;
+  border-radius:10px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>📡 Callbacks EMIS</h2>
+<div id="list"></div>
+
+<script>
+async function load() {
+  const res = await fetch("/callbacks");
+  const data = await res.json();
+
+  const div = document.getElementById("list");
+  div.innerHTML = "";
+
+  data.reverse().forEach(cb => {
+    const el = document.createElement("div");
+    el.className = "card";
+    el.innerHTML = "<pre>"+JSON.stringify(cb,null,2)+"</pre>";
+    div.appendChild(el);
+  });
+}
+
+setInterval(load, 5000);
+load();
+</script>
+
+</body>
+</html>
