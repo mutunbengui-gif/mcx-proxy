@@ -13,13 +13,18 @@ app.post("/token", async (req, res) => {
       "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v2/token",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify(req.body)
       }
     );
 
-    const data = await response.json();
-    res.json(data);
+    const text = await response.text();
+    console.log("TOKEN RESPONSE:", text);
+
+    res.send(text);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -36,15 +41,19 @@ app.post("/charge", async (req, res) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": token,
-          "Accept": "text/plain"
+          "Accept": "text/plain",
+          "Authorization": token?.startsWith("Bearer ")
+            ? token
+            : `Bearer ${token}`
         },
         body: JSON.stringify(req.body)
       }
     );
 
-    const data = await response.text();
-    res.send(data);
+    const text = await response.text();
+    console.log("CHARGE RESPONSE:", text);
+
+    res.send(text);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
