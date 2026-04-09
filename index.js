@@ -8,7 +8,7 @@ app.use(express.json());
 
 /**
  * =========================
- * TOKEN ENDPOINT
+ * TOKEN
  * =========================
  */
 app.post("/token", async (req, res) => {
@@ -40,7 +40,7 @@ app.post("/token", async (req, res) => {
 
 /**
  * =========================
- * CHARGE ENDPOINT
+ * CHARGE (QR CODE)
  * =========================
  */
 app.post("/charge", async (req, res) => {
@@ -75,8 +75,8 @@ app.post("/charge", async (req, res) => {
       }
     };
 
-    console.log("TOKEN RECEBIDO:", token);
-    console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
+    console.log("CHARGE TOKEN:", token);
+    console.log("CHARGE PAYLOAD:", JSON.stringify(payload, null, 2));
 
     const response = await fetch(
       "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/merchants/1275/charges",
@@ -100,6 +100,161 @@ app.post("/charge", async (req, res) => {
 
   } catch (err) {
     console.error("CHARGE ERROR:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * =========================
+ * PAYMENT - MOBILE
+ * =========================
+ */
+app.post("/payments/mobile", async (req, res) => {
+  try {
+    const token = req.headers.authorization;
+
+    const payload = {
+      amount: req.body.amount,
+      orderOrigin: "MOBILE",
+      merchantReferenceNumber: req.body.reference,
+      currency: "AOA",
+      paymentInfo: {
+        mobile: {
+          phoneNumber: req.body.phoneNumber
+        }
+      }
+    };
+
+    const response = await fetch(
+      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/points-of-sale/1405/payments",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token,
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const text = await response.text();
+
+    console.log("PAYMENT MOBILE STATUS:", response.status);
+    console.log("PAYMENT MOBILE RESPONSE:", text);
+
+    return res.status(response.status).send(text);
+
+  } catch (err) {
+    console.error("PAYMENT MOBILE ERROR:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * =========================
+ * PAYMENT - AUTHORIZATION
+ * =========================
+ */
+app.post("/payments/authorization", async (req, res) => {
+  try {
+    const token = req.headers.authorization;
+
+    const payload = {
+      amount: req.body.amount,
+      orderOrigin: "MOBILE",
+      merchantReferenceNumber: req.body.reference,
+      paymentInfo: {
+        mobile: {
+          phoneNumber: req.body.phoneNumber
+        }
+      }
+    };
+
+    const response = await fetch(
+      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/points-of-sale/1405/authorizations",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token,
+          "Accept": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const text = await response.text();
+
+    console.log("AUTH STATUS:", response.status);
+    console.log("AUTH RESPONSE:", text);
+
+    return res.status(response.status).send(text);
+
+  } catch (err) {
+    console.error("AUTH ERROR:", err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * =========================
+ * DEEPLINK BUILDER
+ * =========================
+ */
+function buildMCXDeepLink(qrref, callbackUrl) {
+  const base = "mcxwallet://purchase";
+
+  const params = new URLSearchParams();
+  params.append("qrref", qrref);
+
+  if (callbackUrl) {
+    params.append("callback_url", callbackUrl);
+  }
+
+  return `${base}?${params.toString()}`;
+}
+
+/**
+ * =========================
+ * DEEPLINK FROM CHARGES
+ * =========================
+ */
+app.post("/deeplink", async (req, res) => {
+  try {
+    const token = req.headers.authorization;
+
+    const response = await fetch(
+      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v2/merchants/1275/charges",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token,
+          "Accept": "text/plain"
+        },
+        body: JSON.stringify(req.body)
+      }
+    );
+
+    const qrref = await response.text();
+
+    console.log("QRREF:", qrref);
+
+    const deeplink = buildMCXDeepLink(
+      qrref,
+      req.body.callbackUrl
+    );
+
+    console.log("DEEPLINK:", deeplink);
+
+    return res.json({
+      qrref,
+      deeplink
+    });
+
+  } catch (err) {
+    console.error("DEEPLINK ERROR:", err);
     return res.status(500).json({ error: err.message });
   }
 });
