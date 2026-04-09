@@ -47,22 +47,32 @@ async function getToken() {
   }
 
   try {
-    const response = await axios.post(TOKEN_URL, {
-      grant_type: "password",
-      client_id: process.env.MCX_CLIENT_ID,
-      client_secret: process.env.MCX_CLIENT_SECRET,
-      password: process.env.MCX_PASSWORD,
-      user_email: process.env.MCX_USER_EMAIL
-    });
+    const response = await axios.post(
+      TOKEN_URL,
+      {
+        grant_type: "password",
+        client_id: process.env.MCX_CLIENT_ID,
+        client_secret: process.env.MCX_CLIENT_SECRET,
+        password: process.env.MCX_PASSWORD,
+        user_email: process.env.MCX_USER_EMAIL
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        }
+      }
+    );
 
     cachedToken = response.data.access_token;
 
-    // cache seguro 50 min
     expiresAt = now + 50 * 60 * 1000;
+
+    console.log("✅ TOKEN OK");
 
     return cachedToken;
   } catch (err) {
-    console.error("TOKEN ERROR:", err.response?.data || err.message);
+    console.error("❌ TOKEN ERROR:", err.response?.data || err.message);
     throw new Error("Falha ao obter token MCX");
   }
 }
@@ -80,7 +90,26 @@ function buildDeeplink(qrref, callbackUrl) {
 
 /**
  * =========================
- * 1. CHARGE (FIXED + DEBUG)
+ * 1. TOKEN ENDPOINT (NOVO - PARA TESTE POSTMAN)
+ * =========================
+ */
+app.post("/mcx/token", async (req, res) => {
+  try {
+    const token = await getToken();
+
+    return res.json({
+      access_token: token
+    });
+  } catch (err) {
+    return res.status(500).json({
+      error: err.message
+    });
+  }
+});
+
+/**
+ * =========================
+ * 2. CHARGE (QR CODE)
  * =========================
  */
 app.post("/mcx/charge", async (req, res) => {
@@ -138,7 +167,7 @@ app.post("/mcx/charge", async (req, res) => {
 
 /**
  * =========================
- * 2. CALLBACK MCX
+ * 3. CALLBACK MCX
  * =========================
  */
 app.post("/mcx/callback", (req, res) => {
@@ -162,13 +191,11 @@ app.post("/mcx/callback", (req, res) => {
 
 /**
  * =========================
- * 3. STATUS
+ * 4. STATUS
  * =========================
  */
 app.get("/status/:ref", (req, res) => {
-  const ref = req.params.ref;
-
-  const payment = payments[ref];
+  const payment = payments[req.params.ref];
 
   if (!payment) {
     return res.json({ status: "NOT_FOUND" });
@@ -179,7 +206,7 @@ app.get("/status/:ref", (req, res) => {
 
 /**
  * =========================
- * 4. CALLBACK LIST (DEBUG UI)
+ * 5. CALLBACKS LIST (DEBUG)
  * =========================
  */
 app.get("/callbacks", (req, res) => {
