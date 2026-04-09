@@ -40,12 +40,20 @@ app.post("/token", async (req, res) => {
 
 /**
  * =========================
- * CHARGE (QR CODE)
+ * CHARGE (QR JSON)
  * =========================
  */
 app.post("/charge", async (req, res) => {
   try {
-    const token = req.headers.authorization;
+    const tokenRaw = req.headers.authorization;
+
+    if (!tokenRaw) {
+      return res.status(401).json({ error: "Missing Authorization" });
+    }
+
+    const token = tokenRaw.startsWith("Bearer ")
+      ? tokenRaw
+      : `Bearer ${tokenRaw}`;
 
     const payload = {
       amount: req.body.amount,
@@ -75,9 +83,6 @@ app.post("/charge", async (req, res) => {
       }
     };
 
-    console.log("CHARGE TOKEN:", token);
-    console.log("CHARGE PAYLOAD:", JSON.stringify(payload, null, 2));
-
     const response = await fetch(
       "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/merchants/1275/charges",
       {
@@ -106,147 +111,57 @@ app.post("/charge", async (req, res) => {
 
 /**
  * =========================
- * PAYMENT - MOBILE
- * =========================
- */
-app.post("/payments/mobile", async (req, res) => {
-  try {
-    const token = req.headers.authorization;
-
-    const payload = {
-      amount: req.body.amount,
-      orderOrigin: "MOBILE",
-      merchantReferenceNumber: req.body.reference,
-      currency: "AOA",
-      paymentInfo: {
-        mobile: {
-          phoneNumber: req.body.phoneNumber
-        }
-      }
-    };
-
-    const response = await fetch(
-      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/points-of-sale/1405/payments",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": token,
-          "Accept": "application/json"
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const text = await response.text();
-
-    console.log("PAYMENT MOBILE STATUS:", response.status);
-    console.log("PAYMENT MOBILE RESPONSE:", text);
-
-    return res.status(response.status).send(text);
-
-  } catch (err) {
-    console.error("PAYMENT MOBILE ERROR:", err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * =========================
- * PAYMENT - AUTHORIZATION
- * =========================
- */
-app.post("/payments/authorization", async (req, res) => {
-  try {
-    const token = req.headers.authorization;
-
-    const payload = {
-      amount: req.body.amount,
-      orderOrigin: "MOBILE",
-      merchantReferenceNumber: req.body.reference,
-      paymentInfo: {
-        mobile: {
-          phoneNumber: req.body.phoneNumber
-        }
-      }
-    };
-
-    const response = await fetch(
-      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/points-of-sale/1405/authorizations",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": token,
-          "Accept": "application/json"
-        },
-        body: JSON.stringify(payload)
-      }
-    );
-
-    const text = await response.text();
-
-    console.log("AUTH STATUS:", response.status);
-    console.log("AUTH RESPONSE:", text);
-
-    return res.status(response.status).send(text);
-
-  } catch (err) {
-    console.error("AUTH ERROR:", err);
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * =========================
- * DEEPLINK BUILDER
- * =========================
- */
-function buildMCXDeepLink(qrref, callbackUrl) {
-  const base = "mcxwallet://purchase";
-
-  const params = new URLSearchParams();
-  params.append("qrref", qrref);
-
-  if (callbackUrl) {
-    params.append("callback_url", callbackUrl);
-  }
-
-  return `${base}?${params.toString()}`;
-}
-
-/**
- * =========================
- * DEEPLINK FROM CHARGES
+ * DEEPLINK (QRREF + LINK)
  * =========================
  */
 app.post("/deeplink", async (req, res) => {
   try {
-    const token = req.headers.authorization;
+    const tokenRaw = req.headers.authorization;
+
+    if (!tokenRaw) {
+      return res.status(401).json({ error: "Missing Authorization" });
+    }
+
+    const token = tokenRaw.startsWith("Bearer ")
+      ? tokenRaw
+      : `Bearer ${tokenRaw}`;
+
+    const payload = {
+      amount: req.body.amount,
+      config: {
+        viewType: "QR_CODE",
+        reference: req.body.reference,
+        size: "LARGE",
+        description: req.body.description || "MCX Deeplink Payment",
+        type: "DYNAMIC"
+      },
+      posId: req.body.posId || "2096"
+    };
 
     const response = await fetch(
-      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v2/merchants/1275/charges",
+      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/merchants/1275/charges",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": token,
-          "Accept": "text/plain"
+          "Accept": "text/plain" // 🔥 ESSENCIAL PARA QRREF
         },
-        body: JSON.stringify(req.body)
+        body: JSON.stringify(payload)
       }
     );
 
     const qrref = await response.text();
 
+    console.log("DEEPLINK STATUS:", response.status);
     console.log("QRREF:", qrref);
 
-    const deeplink = buildMCXDeepLink(
-      qrref,
-      req.body.callbackUrl
-    );
+    // Construção do deeplink
+    let deeplink = `mcxwallet://purchase?qrref=${qrref}`;
 
-    console.log("DEEPLINK:", deeplink);
+    if (req.body.callbackUrl) {
+      deeplink += `&callback_url=${encodeURIComponent(req.body.callbackUrl)}`;
+    }
 
     return res.json({
       qrref,
