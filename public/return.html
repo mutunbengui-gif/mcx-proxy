@@ -3,30 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <title>Resultado</title>
-
-<style>
-body {
-  font-family: Arial;
-  background:#0a2540;
-  color:white;
-  text-align:center;
-  padding-top:100px;
-}
-</style>
 </head>
 
-<body>
+<body style="font-family:Arial;text-align:center;padding-top:100px">
 
 <h2 id="status">A verificar pagamento...</h2>
 
-<button onclick="window.location.href='/'">
-Tentar novamente
-</button>
+<button onclick="location.href='/'">Tentar novamente</button>
 
 <script>
 async function check() {
 
-  const ref = new URLSearchParams(window.location.search).get("ref");
+  const ref = new URLSearchParams(location.search).get("ref");
+
+  if (!ref) {
+    document.getElementById("status").innerText = "Referência inválida";
+    return;
+  }
 
   const res = await fetch("/status/" + ref);
   const data = await res.json();
