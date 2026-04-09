@@ -1,37 +1,38 @@
-const express = require("express");
-const axios = require("axios");
-const qs = require("qs");
-require("dotenv").config();
+import express from "express";
+import axios from "axios";
+import qs from "qs";
+import cors from "cors";
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-// ===============================
-// CACHE TOKEN (evita chamadas repetidas)
-// ===============================
+// ==========================
+// TOKEN CACHE
+// ==========================
 let cachedToken = null;
 let tokenExpiresAt = null;
 
-// ===============================
-// GERAR TOKEN EMIS
-// ===============================
+// ==========================
+// GET EMIS TOKEN
+// ==========================
 async function getToken() {
   const now = Date.now();
 
-  // usa cache se ainda válido
+  // usa cache se válido
   if (cachedToken && tokenExpiresAt && now < tokenExpiresAt) {
     return cachedToken;
   }
 
-  const data = qs.stringify({
-    grant_type: "password",
-    client_id: process.env.EMIS_CLIENT_ID,
-    client_secret: process.env.EMIS_CLIENT_SECRET,
-    password: process.env.EMIS_PASSWORD,
-    user_email: process.env.EMIS_EMAIL
-  });
-
   try {
+    const data = qs.stringify({
+      grant_type: "password",
+      client_id: process.env.EMIS_CLIENT_ID,
+      client_secret: process.env.EMIS_CLIENT_SECRET,
+      password: process.env.EMIS_PASSWORD,
+      user_email: process.env.EMIS_EMAIL
+    });
+
     const response = await axios.post(
       process.env.EMIS_AUTH_URL,
       data,
@@ -44,36 +45,39 @@ async function getToken() {
 
     cachedToken = response.data.access_token;
 
-    // fallback 50 min
+    // fallback segurança (50 min)
     tokenExpiresAt = now + 50 * 60 * 1000;
 
     return cachedToken;
 
-  } catch (err) {
-    console.error("Erro token EMIS:", err.response?.data || err.message);
-    throw new Error("Falha ao obter token EMIS");
+  } catch (error) {
+    console.error("Erro ao gerar token EMIS:", error.response?.data || error.message);
+    throw new Error("Falha na autenticação EMIS");
   }
 }
 
-// ===============================
+// ==========================
 // HEALTH CHECK
-// ===============================
+// ==========================
 app.get("/", (req, res) => {
-  res.json({ status: "MCX Proxy running" });
+  res.json({
+    status: "MCX Proxy OK",
+    time: new Date()
+  });
 });
 
-// ===============================
-// ENDPOINT PAGAMENTO MCX EXPRESS
-// ===============================
+// ==========================
+// PAYMENT ENDPOINT
+// ==========================
 app.post("/mcx/pay", async (req, res) => {
   try {
     const token = await getToken();
 
-    const paymentPayload = req.body;
+    const paymentData = req.body;
 
     const response = await axios.post(
-      "https://COLOCAR_ENDPOINT_PAGAMENTO_MCX_AQUI",
-      paymentPayload,
+      "https://COLOCAR_ENDPOINT_REAL_MCX_AQUI",
+      paymentData,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -97,9 +101,9 @@ app.post("/mcx/pay", async (req, res) => {
   }
 });
 
-// ===============================
+// ==========================
 // START SERVER
-// ===============================
+// ==========================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
