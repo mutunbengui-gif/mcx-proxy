@@ -6,7 +6,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// TOKEN
+/**
+ * =========================
+ * TOKEN ENDPOINT
+ * =========================
+ */
 app.post("/token", async (req, res) => {
   try {
     const response = await fetch(
@@ -22,15 +26,23 @@ app.post("/token", async (req, res) => {
     );
 
     const text = await response.text();
+
+    console.log("TOKEN STATUS:", response.status);
     console.log("TOKEN RESPONSE:", text);
 
-    res.send(text);
+    return res.status(response.status).send(text);
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("TOKEN ERROR:", err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// CHARGE
+/**
+ * =========================
+ * CHARGE ENDPOINT
+ * =========================
+ */
 app.post("/charge", async (req, res) => {
   try {
     const token = req.headers.authorization;
@@ -47,7 +59,9 @@ app.post("/charge", async (req, res) => {
       posId: req.body.posId || "2096",
       notify: {
         callbackUrl: {
-          value: req.body.callbackUrl || "https://webhook.site/8e462f9d-51e3-41a7-a3af-fe40723ba947",
+          value:
+            req.body.callbackUrl ||
+            "https://webhook.site/8e462f9d-51e3-41a7-a3af-fe40723ba947",
           active: true
         },
         mobile: {
@@ -62,17 +76,15 @@ app.post("/charge", async (req, res) => {
     };
 
     console.log("TOKEN RECEBIDO:", token);
-console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
-    
+    console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
+
     const response = await fetch(
       "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/merchants/1275/charges",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": token?.startsWith("Bearer ")
-  ? token
-  : `Bearer ${token}`,
+          "Authorization": token,
           "Accept": "application/json"
         },
         body: JSON.stringify(payload)
@@ -80,17 +92,33 @@ console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
     );
 
     const text = await response.text();
+
+    console.log("CHARGE STATUS:", response.status);
     console.log("CHARGE RESPONSE:", text);
 
-    res.send(text);
+    return res.status(response.status).send(text);
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("CHARGE ERROR:", err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
+/**
+ * =========================
+ * HEALTH CHECK
+ * =========================
+ */
 app.get("/", (req, res) => {
   res.send("MCX Proxy no Render 🚀");
 });
 
+/**
+ * =========================
+ * START SERVER
+ * =========================
+ */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server running"));
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
