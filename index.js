@@ -1,159 +1,107 @@
-import express from "express";
-import cors from "cors";
+const express = require("express");
+const axios = require("axios");
+const qs = require("qs");
+require("dotenv").config();
 
 const app = express();
-
-app.use(cors());
 app.use(express.json());
-app.use(express.static("public"));
 
-/**
- * ======================
- * CONFIG SEGURA (BACKEND)
- * ======================
- */
-const EMIS_TOKEN = process.env.EMIS_TOKEN;
+// ===============================
+// CACHE TOKEN (evita chamadas repetidas)
+// ===============================
+let cachedToken = null;
+let tokenExpiresAt = null;
 
-/**
- * MEMÓRIA SIMPLES
- */
-const transactions = {};
-const callbacks = [];
+// ===============================
+// GERAR TOKEN EMIS
+// ===============================
+async function getToken() {
+  const now = Date.now();
 
-/**
- * ======================
- * DEEPLINK MCX
- * ======================
- */
-app.post("/deeplink", async (req, res) => {
+  // usa cache se ainda válido
+  if (cachedToken && tokenExpiresAt && now < tokenExpiresAt) {
+    return cachedToken;
+  }
+
+  const data = qs.stringify({
+    grant_type: "password",
+    client_id: process.env.EMIS_CLIENT_ID,
+    client_secret: process.env.EMIS_CLIENT_SECRET,
+    password: process.env.EMIS_PASSWORD,
+    user_email: process.env.EMIS_EMAIL
+  });
+
   try {
-    if (!EMIS_TOKEN) {
-      return res.status(500).json({ error: "Token EMIS não configurado" });
-    }
-
-    const { amount, reference } = req.body;
-
-    const payload = {
-      amount,
-      config: {
-        viewType: "QR_CODE",
-        reference,
-        size: "LARGE",
-        description: "Pagamento MCX",
-        type: "DYNAMIC"
-      },
-      posId: "2096",
-      notify: {
-        callbackUrl: {
-          value: "https://mcx-proxy.onrender.com/webhook/emis",
-          active: true
-        }
-      }
-    };
-
-    const response = await fetch(
-      "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/merchants/1275/charges",
+    const response = await axios.post(
+      process.env.EMIS_AUTH_URL,
+      data,
       {
-        method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": EMIS_TOKEN,
-          "Accept": "text/plain"
-        },
-        body: JSON.stringify(payload)
+          "Content-Type": "application/x-www-form-urlencoded"
+        }
       }
     );
 
-    const qrref = await response.text();
+    cachedToken = response.data.access_token;
 
-    transactions[reference] = {
-      status: "PENDING",
-      qrref,
-      amount,
-      createdAt: new Date()
-    };
+    // fallback 50 min
+    tokenExpiresAt = now + 50 * 60 * 1000;
 
-    const deeplink =
-      `mcxwallet://purchase?qrref=${qrref}` +
-      `&callback_url=https://mcx-proxy.onrender.com/return.html?ref=${reference}`;
-
-    return res.json({ qrref, deeplink });
+    return cachedToken;
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: err.message });
+    console.error("Erro token EMIS:", err.response?.data || err.message);
+    throw new Error("Falha ao obter token EMIS");
   }
+}
+
+// ===============================
+// HEALTH CHECK
+// ===============================
+app.get("/", (req, res) => {
+  res.json({ status: "MCX Proxy running" });
 });
 
-/**
- * ======================
- * WEBHOOK EMIS
- * ======================
- */
-app.post("/webhook/emis", (req, res) => {
+// ===============================
+// ENDPOINT PAGAMENTO MCX EXPRESS
+// ===============================
+app.post("/mcx/pay", async (req, res) => {
   try {
-    const data = req.body;
+    const token = await getToken();
 
-    console.log("🔥 CALLBACK RECEBIDO:", data);
+    const paymentPayload = req.body;
 
-    callbacks.push({
-      time: new Date(),
-      data
+    const response = await axios.post(
+      "https://COLOCAR_ENDPOINT_PAGAMENTO_MCX_AQUI",
+      paymentPayload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      data: response.data
     });
 
-    const reference =
-      data?.config?.reference ||
-      data?.merchantReferenceNumber;
+  } catch (error) {
+    console.error("Erro pagamento:", error.response?.data || error.message);
 
-    const status = data?.status;
-
-    if (reference) {
-      if (!transactions[reference]) {
-        transactions[reference] = {};
-      }
-
-      transactions[reference].status = status;
-      transactions[reference].updatedAt = new Date();
-    }
-
-    return res.sendStatus(200);
-
-  } catch (err) {
-    console.error(err);
-    return res.sendStatus(500);
+    res.status(500).json({
+      success: false,
+      error: error.response?.data || error.message
+    });
   }
 });
 
-/**
- * ======================
- * STATUS PAYMENT
- * ======================
- */
-app.get("/status/:reference", (req, res) => {
-  const tx = transactions[req.params.reference];
-
-  if (!tx) {
-    return res.status(404).json({ error: "Not found" });
-  }
-
-  return res.json(tx);
-});
-
-/**
- * ======================
- * CALLBACKS LIST
- * ======================
- */
-app.get("/callbacks", (req, res) => {
-  return res.json(callbacks);
-});
-
-/**
- * ======================
- * START SERVER
- * ======================
- */
+// ===============================
+// START SERVER
+// ===============================
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("MCX Proxy running on port", PORT);
+  console.log(`MCX Proxy running on port ${PORT}`);
 });
