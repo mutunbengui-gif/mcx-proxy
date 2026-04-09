@@ -68,7 +68,8 @@ app.post("/charge", async (req, res) => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": token,
-          "Accept": "application/json"
+          "Accept": "application/json",
+          "Accept": "image/png"
         },
         body: JSON.stringify(payload)
       }
