@@ -65,20 +65,10 @@ app.post("/charge", async (req, res) => {
         type: "DYNAMIC"
       },
       posId: req.body.posId || "2096",
-      notify: {
+      notify: req.body.notify || {
         callbackUrl: {
-          value:
-            req.body.callbackUrl ||
-            "https://webhook.site/8e462f9d-51e3-41a7-a3af-fe40723ba947",
+          value: "https://webhook.site/8e462f9d-51e3-41a7-a3af-fe40723ba947",
           active: true
-        },
-        mobile: {
-          value: req.body.mobile || 924061515,
-          active: true
-        },
-        email: {
-          value: req.body.email || "mutu.n.bengui@gmail.com",
-          active: false
         }
       }
     };
@@ -111,7 +101,7 @@ app.post("/charge", async (req, res) => {
 
 /**
  * =========================
- * DEEPLINK (QRREF + LINK)
+ * DEEPLINK (QRREF + CALLBACK APP)
  * =========================
  */
 app.post("/deeplink", async (req, res) => {
@@ -135,7 +125,8 @@ app.post("/deeplink", async (req, res) => {
         description: req.body.description || "MCX Deeplink Payment",
         type: "DYNAMIC"
       },
-      posId: req.body.posId || "2096"
+      posId: req.body.posId || "2096",
+      notify: req.body.notify // 👈 webhook EMIS (opcional mas importante)
     };
 
     const response = await fetch(
@@ -145,7 +136,7 @@ app.post("/deeplink", async (req, res) => {
         headers: {
           "Content-Type": "application/json",
           "Authorization": token,
-          "Accept": "text/plain" // 🔥 ESSENCIAL PARA QRREF
+          "Accept": "text/plain" // 🔥 devolve QRREF
         },
         body: JSON.stringify(payload)
       }
@@ -156,12 +147,13 @@ app.post("/deeplink", async (req, res) => {
     console.log("DEEPLINK STATUS:", response.status);
     console.log("QRREF:", qrref);
 
-    // Construção do deeplink
-    let deeplink = `mcxwallet://purchase?qrref=${qrref}`;
+    // 🔗 CALLBACK DA APP (deeplink)
+    const callback =
+      req.body.callbackUrl || "myapp://callback";
 
-    if (req.body.callbackUrl) {
-      deeplink += `&callback_url=${encodeURIComponent(req.body.callbackUrl)}`;
-    }
+    const deeplink =
+      `mcxwallet://purchase?qrref=${qrref}` +
+      `&callback_url=${encodeURIComponent(callback)}`;
 
     return res.json({
       qrref,
