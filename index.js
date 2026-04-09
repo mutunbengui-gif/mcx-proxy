@@ -61,13 +61,18 @@ app.post("/charge", async (req, res) => {
       }
     };
 
+    console.log("TOKEN RECEBIDO:", token);
+console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
+    
     const response = await fetch(
       "https://cerpagamentonline.emis.co.ao/online-payment-gateway/api/v1/merchants/1275/charges",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": token,
+          "Authorization": token?.startsWith("Bearer ")
+  ? token
+  : `Bearer ${token}`,
           "Accept": "application/json"
         },
         body: JSON.stringify(payload)
