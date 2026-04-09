@@ -1,78 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>MCX Payment</title>
-
-<style>
-body {
-  font-family: Arial;
-  background: linear-gradient(135deg,#0a2540,#1e3c72);
-  color:white;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  height:100vh;
-}
-
-.card {
-  background:#ffffff10;
-  padding:30px;
-  border-radius:15px;
-  width:320px;
-}
-
-input {
-  width:100%;
-  padding:10px;
-  margin-top:10px;
-  border:none;
-  border-radius:8px;
-}
-
-button {
-  width:100%;
-  margin-top:20px;
-  padding:12px;
-  background:#00c853;
-  border:none;
-  color:white;
-  border-radius:10px;
-  cursor:pointer;
-}
-</style>
+  <title>MCX Pay</title>
 </head>
-
 <body>
 
-<div class="card">
-<h2>💳 MCX Express</h2>
+<h2>Pagamento MCX</h2>
 
-<input id="amount" type="number" value="100" />
-<input id="reference" value="pedido123" />
+<input id="amount" placeholder="Valor" />
+<input id="phone" placeholder="Telefone" />
 
 <button onclick="pay()">PAGAR NO MCX EXPRESS</button>
-</div>
 
 <script>
 async function pay() {
+  const payload = {
+    amount: document.getElementById("amount").value,
+    posId: "2096",
+    config: {
+      viewType: "QR_CODE",
+      reference: "WEB123",
+      size: "LARGE",
+      type: "DYNAMIC",
+      description: "Pagamento Web"
+    },
+    notify: {
+      callbackUrl: {
+        value: "https://mcx-proxy.onrender.com/mcx/callback",
+        active: true
+      },
+      mobile: {
+        value: document.getElementById("phone").value,
+        active: true
+      }
+    }
+  };
 
-  const amount = document.getElementById("amount").value;
-  const reference = document.getElementById("reference").value;
-
-  const res = await fetch("/deeplink", {
+  const res = await fetch("/mcx/charge", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      amount: Number(amount),
-      reference
-    })
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json();
 
+  // abre MCX EXPRESS
   window.location.href = data.deeplink;
 }
 </script>
