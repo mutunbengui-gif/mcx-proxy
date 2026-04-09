@@ -2,6 +2,7 @@ import express from "express";
 import axios from "axios";
 
 const app = express();
+
 app.use(express.json());
 app.use(express.static("public"));
 
@@ -27,38 +28,43 @@ const callbacks = [];
 
 /**
  * =========================
- * TOKEN CACHE (IMPORTANTE)
+ * TOKEN CACHE
  * =========================
  */
 let cachedToken = null;
-let tokenExpiresAt = null;
+let expiresAt = null;
 
 /**
  * =========================
- * GET TOKEN (AUTO)
+ * GET TOKEN (ROBUSTO)
  * =========================
  */
 async function getToken() {
   const now = Date.now();
 
-  if (cachedToken && tokenExpiresAt && now < tokenExpiresAt) {
+  if (cachedToken && expiresAt && now < expiresAt) {
     return cachedToken;
   }
 
-  const response = await axios.post(TOKEN_URL, {
-    grant_type: "password",
-    client_id: process.env.MCX_CLIENT_ID,
-    client_secret: process.env.MCX_CLIENT_SECRET,
-    password: process.env.MCX_PASSWORD,
-    user_email: process.env.MCX_USER_EMAIL
-  });
+  try {
+    const response = await axios.post(TOKEN_URL, {
+      grant_type: "password",
+      client_id: process.env.MCX_CLIENT_ID,
+      client_secret: process.env.MCX_CLIENT_SECRET,
+      password: process.env.MCX_PASSWORD,
+      user_email: process.env.MCX_USER_EMAIL
+    });
 
-  cachedToken = response.data.access_token;
+    cachedToken = response.data.access_token;
 
-  // fallback: 50 min cache
-  tokenExpiresAt = now + 50 * 60 * 1000;
+    // cache seguro 50 min
+    expiresAt = now + 50 * 60 * 1000;
 
-  return cachedToken;
+    return cachedToken;
+  } catch (err) {
+    console.error("TOKEN ERROR:", err.response?.data || err.message);
+    throw new Error("Falha ao obter token MCX");
+  }
 }
 
 /**
@@ -74,12 +80,14 @@ function buildDeeplink(qrref, callbackUrl) {
 
 /**
  * =========================
- * 1. CREATE CHARGE (V1 MCX EXPRESS)
+ * 1. CHARGE (FIXED + DEBUG)
  * =========================
  */
 app.post("/mcx/charge", async (req, res) => {
   try {
     const token = await getToken();
+
+    console.log("➡️ REQUEST BODY:", req.body);
 
     const response = await axios.post(
       `${BASE_URL}/api/v1/merchants/${MERCHANT_ID}/charges`,
@@ -92,6 +100,8 @@ app.post("/mcx/charge", async (req, res) => {
         }
       }
     );
+
+    console.log("➡️ MCX RESPONSE:", response.data);
 
     const qrref = response.data;
 
@@ -106,15 +116,20 @@ app.post("/mcx/charge", async (req, res) => {
 
     const deeplink = buildDeeplink(qrref, callbackUrl);
 
-    res.json({
+    return res.json({
       success: true,
       qrref,
       deeplink
     });
-  } catch (err) {
-    console.error("CHARGE ERROR:", err.response?.data || err.message);
 
-    res.status(500).json({
+  } catch (err) {
+    console.error("❌ CHARGE ERROR:", {
+      message: err.message,
+      status: err.response?.status,
+      data: err.response?.data
+    });
+
+    return res.status(500).json({
       success: false,
       error: err.response?.data || err.message
     });
@@ -123,90 +138,13 @@ app.post("/mcx/charge", async (req, res) => {
 
 /**
  * =========================
- * 2. MOBILE PAYMENT
- * =========================
- */
-app.post("/mcx/payments/mobile", async (req, res) => {
-  try {
-    const token = await getToken();
-
-    const response = await axios.post(
-      `${BASE_URL}/api/v1/points-of-sale/1405/payments`,
-      {
-        amount: req.body.amount,
-        orderOrigin: "MOBILE",
-        merchantReferenceNumber: req.body.reference,
-        currency: "AOA",
-        paymentInfo: {
-          mobile: {
-            phoneNumber: req.body.phoneNumber
-          }
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json"
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({
-      error: err.response?.data || err.message
-    });
-  }
-});
-
-/**
- * =========================
- * 3. AUTHORIZATION
- * =========================
- */
-app.post("/mcx/payments/authorization", async (req, res) => {
-  try {
-    const token = await getToken();
-
-    const response = await axios.post(
-      `${BASE_URL}/api/v1/points-of-sale/1405/authorizations`,
-      {
-        amount: req.body.amount,
-        orderOrigin: "MOBILE",
-        merchantReferenceNumber: req.body.reference,
-        paymentInfo: {
-          mobile: {
-            phoneNumber: req.body.phoneNumber
-          }
-        }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          Accept: "application/json"
-        }
-      }
-    );
-
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({
-      error: err.response?.data || err.message
-    });
-  }
-});
-
-/**
- * =========================
- * 4. CALLBACK MCX
+ * 2. CALLBACK MCX
  * =========================
  */
 app.post("/mcx/callback", (req, res) => {
   const data = req.body;
 
-  console.log("MCX CALLBACK:", data);
+  console.log("📡 CALLBACK RECEIVED:", data);
 
   const ref = data.reference || data.qrref;
 
@@ -224,7 +162,7 @@ app.post("/mcx/callback", (req, res) => {
 
 /**
  * =========================
- * 5. STATUS CHECK
+ * 3. STATUS
  * =========================
  */
 app.get("/status/:ref", (req, res) => {
@@ -236,14 +174,12 @@ app.get("/status/:ref", (req, res) => {
     return res.json({ status: "NOT_FOUND" });
   }
 
-  res.json({
-    status: payment.status
-  });
+  res.json({ status: payment.status });
 });
 
 /**
  * =========================
- * 6. CALLBACKS LIST
+ * 4. CALLBACK LIST (DEBUG UI)
  * =========================
  */
 app.get("/callbacks", (req, res) => {
@@ -252,11 +188,11 @@ app.get("/callbacks", (req, res) => {
 
 /**
  * =========================
- * HOME
+ * HEALTH CHECK
  * =========================
  */
 app.get("/", (req, res) => {
-  res.sendFile(process.cwd() + "/public/index.html");
+  res.send("MCX Proxy OK 🚀");
 });
 
 /**
