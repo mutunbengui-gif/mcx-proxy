@@ -7,9 +7,9 @@
 <style>
 body {
   font-family: Arial;
-  text-align:center;
   background:#0a2540;
   color:white;
+  text-align:center;
   padding-top:100px;
 }
 </style>
@@ -17,22 +17,29 @@ body {
 
 <body>
 
-<h2 id="status">A verificar...</h2>
-<button onclick="window.location.href='/'">Tentar novamente</button>
+<h2 id="status">A verificar pagamento...</h2>
+
+<button onclick="window.location.href='/'">
+Tentar novamente
+</button>
 
 <script>
 async function check() {
-  const params = new URLSearchParams(window.location.search);
-  const ref = params.get("ref");
+
+  const ref = new URLSearchParams(window.location.search).get("ref");
 
   const res = await fetch("/status/" + ref);
   const data = await res.json();
 
   if (data.status === "SUCCESS") {
     document.getElementById("status").innerText = "✅ SUCESSO";
-  } else if (data.status === "ERROR") {
-    document.getElementById("status").innerText = "❌ ERRO";
-  } else {
+  }
+
+  else if (data.status === "ERROR") {
+    document.getElementById("status").innerText = "❌ FALHOU";
+  }
+
+  else {
     setTimeout(check, 3000);
   }
 }
